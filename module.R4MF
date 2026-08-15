@@ -1,0 +1,17 @@
+R4OS_MODULE_MANIFEST=2
+KIND=R4X
+NAME=R4SLSVC
+VERSION=0.1.1
+LANGUAGE=Zig
+SOURCE=src/main.zig
+ENTRY_MODE=app
+APP_CLASS=service
+TARGET=/R4OS/SERVICES/R4SLSVC.R4X
+IMAGE_SCOPE=full
+IMPORT=R4SYS:Query:1
+IMPORT=R4NET:Query:1
+META=service.name=R4SLSVC
+META=service.args=/RUN
+META=service.start=auto
+META=service.enabled=yes
+META=service.config=Injection\R4OS\CONFIG\SERVICES.R4S

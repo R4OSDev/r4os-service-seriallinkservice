@@ -1,0 +1,11 @@
+/.zig-cache/
+/zig-out/
+/zig-pkg/
+
+*.exe
+*.obj
+*.o
+*.pdb
+
+.DS_Store
+Thumbs.db

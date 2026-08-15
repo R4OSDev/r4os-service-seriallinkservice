@@ -1,0 +1,20 @@
+.{
+    .name = .r4os_r4slsvc,
+    .version = "0.1.1",
+    .fingerprint = 0x9e24ce9b51b4e155,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .r4os_sdk = .{
+            .url = "https://github.com/R4OSDev/r4os-sdk/archive/74d2e31dfbcf2bb8531cac44f91200f5c31947b4.tar.gz",
+            .hash = "r4os_sdk-0.64.17-NnPzAolu7gDVNAakB-ik3ZS5kDAE9nC-0AUv4_aIqe2H",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "module.R4MF",
+        "README.txt",
+        "PROVENANCE.txt",
+    },
+}
