@@ -12,11 +12,13 @@
     .paths = .{
         "LICENSE",
         "NOTICE",
+        "README.md",
+        "DOCUMENTATION.de.txt",
+        "THIRD_PARTY_NOTICES.md",
         "build.zig",
         "build.zig.zon",
         "src",
         "module.R4MF",
-        "README.txt",
         "PROVENANCE.txt",
     },
 }

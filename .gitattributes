@@ -13,3 +13,4 @@
 *.bin -text
 *.ico -text
 *.png -text
+*.md text eol=lf
