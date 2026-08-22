@@ -95,25 +95,32 @@ fn runService(app: *const App) i32 {
     setLastError(&state, "ready");
     syncKernel(app, &state);
 
-    while (!app.sys.programShouldClose()) {
+    var service_loop = r4os.ServiceLoop.init(app.sys, handle, .{});
+    while (true) {
         syncKernel(app, &state);
-        const poll = app.sys.serviceEndpointPoll(handle);
-        if (poll < 0) {
-            clearQueues(&state, true);
-            _ = app.sys.serviceEndpointUnregister(handle);
-            return poll;
-        }
-        if (poll > 0) {
-            const rc = handleRequest(app, handle, &state);
-            if (rc < 0) {
+        // Ohne praesent initialisierten COM2-Link existiert keine
+        // fachliche Pollfrist. Mit Link bleibt der bisherige Ein-Tick-Drain
+        // bis zu einem spaeteren RX-IRQ-/Ringvertrag erhalten.
+        const deadline = if (state.kernel.present != 0 and state.kernel.initialized != 0) app.sys.ticks() +| 1 else null;
+        switch (service_loop.wait(deadline)) {
+            .requests => |pending| {
+                const rc = service_loop.drain(pending, handleRequest, .{ app, handle, &state });
+                if (rc >= 0) continue;
                 clearQueues(&state, true);
                 _ = app.sys.serviceEndpointUnregister(handle);
                 return rc;
-            }
+            },
+            .deadline, .idle => {},
+            .stop => break,
+            .failure => |raw| {
+                clearQueues(&state, true);
+                _ = app.sys.serviceEndpointUnregister(handle);
+                return raw;
+            },
         }
-        app.sys.sleepTicks(1);
     }
 
+    service_loop.report(service_name);
     clearQueues(&state, true);
     _ = app.sys.serviceEndpointUnregister(handle);
     app.sys.println("R4SLSVC stopped cleanly");
