@@ -31,8 +31,12 @@ const ServiceState = struct {
     queue_clears: u64 = 0,
     drops: u64 = 0,
     cancelled: u64 = 0,
+    kernel_drained: u64 = 0,
+    kernel_backpressure: u64 = 0,
+    send_failures: u64 = 0,
+    inbox_high_water: u16 = 0,
+    outbox_high_water: u16 = 0,
     last_result: i32 = r4os.abi.serial_link_result_failed,
-    last_kernel_message_rx: u64 = 0,
     kernel: r4os.abi.SerialLinkStatus = .{},
     inbox: [QUEUE_CAPACITY]QueueItem = .{QueueItem{}} ** QUEUE_CAPACITY,
     outbox: [QUEUE_CAPACITY]QueueItem = .{QueueItem{}} ** QUEUE_CAPACITY,
@@ -188,6 +192,7 @@ fn replySendMessage(app: *const App, handle: u32, request_id: u32, payload: []co
         state.last_result = r4os.abi.serial_link_result_failed;
         setLastError(state, "outbox-full");
     } else {
+        state.outbox_high_water = @max(state.outbox_high_water, state.outbox_count);
         copyLastServiceMessage(state, payload);
         flushOutbox(app, state);
     }
@@ -253,7 +258,10 @@ fn flushOutbox(app: *const App, state: *ServiceState) void {
         const rc = app.net.serialLinkSendMessage(item.data[0..len]);
         if (rc < 0) {
             state.last_result = rc;
+            state.send_failures +%= 1;
+            state.drops +%= 1;
             setLastError(state, serialResultName(rc));
+            discardFirst(&state.outbox, &state.outbox_count);
             return;
         }
         discardFirst(&state.outbox, &state.outbox_count);
@@ -271,16 +279,25 @@ fn syncKernel(app: *const App, state: *ServiceState) void {
         return;
     }
     state.kernel = status;
-    if (status.message_rx != state.last_kernel_message_rx) {
+    while (state.inbox_count < QUEUE_CAPACITY) {
         var msg = r4os.abi.SerialLinkMessage{};
         const got = app.net.serialLinkInbox(&msg);
-        if (got > 0) {
-            const len: usize = @intCast(msg.len);
-            if (!pushQueue(&state.inbox, &state.inbox_count, msg.data[0..len])) state.drops +%= 1;
-            copyLastServiceMessage(state, msg.data[0..len]);
+        if (got < 0) {
+            state.last_result = got;
+            setLastError(state, "kernel-inbox");
+            return;
         }
-        state.last_kernel_message_rx = status.message_rx;
+        if (got == 0) break;
+        const len: usize = @intCast(msg.len);
+        if (!pushQueue(&state.inbox, &state.inbox_count, msg.data[0..len])) {
+            state.drops +%= 1;
+            break;
+        }
+        state.kernel_drained +%= 1;
+        state.inbox_high_water = @max(state.inbox_high_water, state.inbox_count);
+        copyLastServiceMessage(state, msg.data[0..len]);
     }
+    if (state.inbox_count >= QUEUE_CAPACITY) state.kernel_backpressure +%= 1;
 }
 
 fn makeStatus(state: *const ServiceState) r4os.abi.NetServiceR4slStatus {
@@ -350,8 +367,26 @@ fn writeStatusText(w: *Writer, state: *const ServiceState) void {
     w.num(state.inbox_count);
     w.text(" outbox=");
     w.num(state.outbox_count);
+    w.text(" qcap=");
+    w.num(QUEUE_CAPACITY);
+    w.text(" qhigh=");
+    w.num(state.inbox_high_water);
+    w.text("/");
+    w.num(state.outbox_high_water);
+    w.text(" kernel_drain=");
+    w.num(state.kernel_drained);
+    w.text(" kernel_backpressure=");
+    w.num(state.kernel_backpressure);
+    w.text(" send_fail=");
+    w.num(state.send_failures);
+    w.text(" drops=");
+    w.num(state.drops);
     w.text(" tx=");
     w.num(state.kernel.tx_frames);
+    w.text(" tx_bytes=");
+    w.num(state.kernel.tx_bytes);
+    w.text(" tx_skip=");
+    w.num(state.kernel.tx_skipped);
     w.text(" rx=");
     w.num(state.kernel.rx_frames);
     w.text(" msg_tx=");
@@ -362,6 +397,8 @@ fn writeStatusText(w: *Writer, state: *const ServiceState) void {
     w.num(state.kernel.bad_magic);
     w.text(" checksum=");
     w.num(state.kernel.checksum_errors);
+    w.text(" overflow=");
+    w.num(state.kernel.overflows);
     w.text(" timeout=");
     w.num(state.kernel.timeouts);
     w.text(" last=");
@@ -456,11 +493,18 @@ fn localContractSelfTest() bool {
     frame[0] = 'X';
     if (parseFrame(frame[0..len], &frame_type, parsed[0..]) != null) return false;
 
-    if (!pushQueue(&state.inbox, &state.inbox_count, "IN")) return false;
+    var index: usize = 0;
+    while (index < QUEUE_CAPACITY) : (index += 1) {
+        const item = [_]u8{@intCast(index)};
+        if (!pushQueue(&state.inbox, &state.inbox_count, item[0..])) return false;
+    }
+    if (pushQueue(&state.inbox, &state.inbox_count, "overflow")) return false;
     if (!pushQueue(&state.outbox, &state.outbox_count, "OUT")) return false;
-    if (state.inbox_count != 1 or state.outbox_count != 1) return false;
-    var msg = r4os.abi.SerialLinkMessage{};
-    if (!popQueue(&state.inbox, &state.inbox_count, &msg) or msg.len != 2) return false;
+    index = 0;
+    while (index < QUEUE_CAPACITY) : (index += 1) {
+        var msg = r4os.abi.SerialLinkMessage{};
+        if (!popQueue(&state.inbox, &state.inbox_count, &msg) or msg.len != 1 or msg.data[0] != index) return false;
+    }
     clearQueues(&state, false);
     return state.inbox_count == 0 and state.outbox_count == 0 and state.queue_clears == 1;
 }
