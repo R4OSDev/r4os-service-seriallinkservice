@@ -10,18 +10,23 @@ Projektstruktur seit 0.51.19:
 
 Build:
 
-    cd Code\System\Services\SerialLinkService
-    ..\..\..\DevTools\Zig\zig.exe build
+    Build.bat        Windows, aus diesem Repository
+    ./Build.sh       Linux, aus diesem Repository
+
+Die Starter verwenden die Pfadmappings aus `Settings.R4S` und die gemeinsame
+SDK-Baugrundlage.
 
 Ergebnis:
 
-    Code\System\Services\SerialLinkService\zig-out\R4SLSVC.R4X
+    Artifacts/Modules/SerialLinkService/R4SLSVC.R4X
+
+Der Pfad ist relativ zum Workspace-Root und folgt dem standardmaessigen
+`ARTIFACTS_ROOT` aus `Settings.R4S`.
 
 Contract:
-- R4XStart-Entry: `r4slsvc_main`
+- Entry-Modus: `app` gemaess `module.R4MF`
 - App-Klasse: `service`
-- R4L-Imports: `R4SYS`, `R4NET`
+- Platform-API-Imports: `R4SYS:Query:1`, `R4NET:Query:1`
 - Service-Name: `R4SLSVC`
 - Standardargumente: `/RUN`
 - Zielpfad im Image: `C:\R4OS\SERVICES\R4SLSVC.R4X`
-

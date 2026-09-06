@@ -4,7 +4,7 @@
 
 ## Package
 
-- Version: `0.1.2`
+- Version: `0.1.3`
 - Image target: `/R4OS/SERVICES/R4SLSVC.R4X`
 - Image scope: `full`
 - Canonical project manifest: `module.R4MF`
